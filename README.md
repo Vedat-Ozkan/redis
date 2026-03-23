@@ -21,3 +21,7 @@ cmake --build build
 ./build/server_08
 ./build/client
 ```
+
+Acknowledgements
+
+This project was built while working through [Build Your Own Redis with C/C++ by James Smith](https://build-your-own.org/redis/#table-of-contents), with my own implementation of the completed chapters.
