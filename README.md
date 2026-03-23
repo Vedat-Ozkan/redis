@@ -14,7 +14,7 @@ Main client/test harness: `src/client/03_client.cpp`
 
 Storage uses a custom hash table with incremental rehashing; the AVL tree is included for future ordered operations.
 
-Build:
+### Build:
 ```bash
 cmake -S . -B build
 cmake --build build
@@ -22,6 +22,6 @@ cmake --build build
 ./build/client
 ```
 
-Acknowledgements
+### Acknowledgements
 
 This project was built while working through [Build Your Own Redis with C/C++ by James Smith](https://build-your-own.org/redis/#table-of-contents), with my own implementation of the completed chapters.
