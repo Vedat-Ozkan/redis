@@ -1,0 +1,14 @@
+build/
+.cache/
+.vscode/
+
+client
+client_08
+client_09
+client_tmp
+server
+server_08
+server_06
+test_avl
+
+compile_commands.json
