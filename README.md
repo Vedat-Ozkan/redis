@@ -6,20 +6,34 @@ The server uses non-blocking sockets and a single-threaded `poll()` event loop t
 
 Requests are read into per-connection buffers, parsed from a framed binary format, executed against an in-memory store, and written back as typed responses.
 
-Current commands: `set`, `get`, `del`, and `keys`.
+Current commands: `set`, `get`, `del`, `keys`, and sorted set operations via `zadd`, `zquery`, `zdel`, `zscore`.
 
-Main server: `src/server/08_server.cpp`
+### Project Structure
 
-Main client/test harness: `src/client/03_client.cpp`
+```
+src/
+  server/   — server.cpp, conn.cpp, protocol.cpp, kvstore.cpp
+  client/   — client.cpp
+  ds/       — avl.cpp, hashtable.cpp, zset.cpp, buffer.cpp, thread_pool.cpp, ttl_heap.cpp
+include/    — header files
+tests/      — test_avl.cpp
+```
 
-Storage uses a custom hash table with incremental rehashing; the AVL tree is included for future ordered operations.
+Storage uses a custom hash table with incremental rehashing. The AVL tree backs the sorted set (`zset`) implementation. A TTL heap handles key expiry, and a thread pool supports background tasks.
 
-### Build:
+### Build
+
 ```bash
 cmake -S . -B build
 cmake --build build
-./build/server_08
+./build/server
 ./build/client
+```
+
+### Test
+
+```bash
+./build/test_avl
 ```
 
 ### Acknowledgements
