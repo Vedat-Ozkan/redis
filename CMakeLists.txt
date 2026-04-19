@@ -6,40 +6,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include_directories(include)
 
-# Common code
 set(COMMON_SRC
     src/common.cpp
 )
 
-# Clients
 add_executable(client
-    src/client/03_client.cpp
+    src/client/client.cpp
     ${COMMON_SRC}
 )
 
-add_executable(client_08
-    src/client/03_client.cpp
-    ${COMMON_SRC}
-)
-
-add_executable(client_tmp
-    src/client/03_client.cpp
-    ${COMMON_SRC}
-)
-
-# Servers
 add_executable(server
-    src/server/03_server.cpp
-    ${COMMON_SRC}
-)
-
-add_executable(server_06
-    src/server/06_server.cpp
-    ${COMMON_SRC}
-)
-
-add_executable(server_08
-    src/server/08_server.cpp
+    src/server/server.cpp
+    src/server/conn.cpp
+    src/server/protocol.cpp
+    src/server/kvstore.cpp
+    src/ds/avl.cpp
+    src/ds/zset.cpp
+    src/ds/buffer.cpp
+    src/ds/hashtable.cpp
+    src/ds/thread_pool.cpp
+    src/ds/ttl_heap.cpp
     ${COMMON_SRC}
 )
 

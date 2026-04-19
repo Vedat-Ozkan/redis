@@ -1,28 +1,28 @@
 #pragma once
-#include <string>
-#include <cstdint>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
+#include <string>
+
+using Clock = std::chrono::steady_clock;
+
+#define container_of(ptr, type, member) \
+  ((type *)((char *)(ptr) - offsetof(type, member)))
 
 enum {
-  TAG_NIL = 0,    // nil
-  TAG_ERR = 1,    // error code + msg
-  TAG_STR = 2,    // string
-  TAG_INT = 3,    // int64
-  TAG_DBL = 4,    // double
-  TAG_ARR = 5,    // array
+  TAG_NIL = 0,
+  TAG_ERR = 1,
+  TAG_STR = 2,
+  TAG_INT = 3,
+  TAG_DBL = 4,
+  TAG_ARR = 5,
 };
 
 enum {
-  ERR_UNKNOWN = 1,    // unknown command
-  ERR_TOO_BIG = 2,    // response too big
+  ERR_UNKNOWN = 1,
+  ERR_TOO_BIG = 2,
 };
 
-
-enum class Status : uint32_t {
-  RES_OK = 0,
-  RES_ERR = 1,
-  RES_NX = 2
-};
 
 inline constexpr size_t k_max_msg = 32 << 20;
 inline constexpr size_t k_max_args = 200 * 1000;

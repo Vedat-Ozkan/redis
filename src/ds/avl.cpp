@@ -1,9 +1,9 @@
 #include "avl.h"
 #include <cassert>
 #include <algorithm>
+#include <cstdint>
 
 using namespace std;
-
 
 void AVLNode::avl_update() {
   this->height = 1 + max(avl_height(this->left), avl_height(this->right));
@@ -136,4 +136,30 @@ AVLNode *AVLNode::avl_del() {
   }
   *from = victim;
   return root;
+}
+
+AVLNode *AVLNode::avl_offset(int64_t offset) {
+  AVLNode *node = this;
+  int64_t pos = 0;
+  while (offset != pos) {
+    if (pos < offset && pos + (int64_t)avl_cnt(node->right) >= offset) {
+      node = node->right;
+      pos += 1 + (int64_t)avl_cnt(node->left);
+    } else if (pos > offset && pos - (int64_t)avl_cnt(node->left) <= offset) {
+      node = node->left;
+      pos -= 1 + (int64_t)avl_cnt(node->right);
+    } else {
+      AVLNode *parent = node->parent;
+      if (!parent) {
+        return nullptr;
+      }
+      if (parent->right == node) {
+        pos -= 1 + (int64_t)avl_cnt(node->left);
+      } else {
+        pos += 1 + (int64_t)avl_cnt(node->right);
+      }
+      node = parent;
+    }
+  }
+  return node;
 }

@@ -182,11 +182,10 @@ static void test_random_deletes() {
   }
   verify_tree(root, keys.size());
 
-  // Shuffle deletions.
   for (size_t i = 0; i < keys.size(); ++i) {
     uniform_int_distribution<size_t> pick(i, keys.size() - 1);
     size_t j = pick(rng);
-    std::swap(keys[i], keys[j]);
+    swap(keys[i], keys[j]);
   }
 
   for (size_t i = 0; i < keys.size(); ++i) {

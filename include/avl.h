@@ -30,6 +30,8 @@ class AVLNode {
 
   AVLNode *avl_fix();
   AVLNode *avl_del();
+
+  AVLNode *avl_offset(int64_t offset);
 };
 
 inline uint32_t avl_height(AVLNode *node) { return node ? node->height : 0; }

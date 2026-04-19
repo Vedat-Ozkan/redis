@@ -3,6 +3,7 @@
 #include <string>
 #include <iostream>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 #include <cstring>
 #include <vector>
@@ -101,7 +102,7 @@ static bool parse_value(const uint8_t *&cur, const uint8_t *end, Value &out) {
       for (uint32_t i = 0; i < n; ++i) {
         Value v;
         if (!parse_value(cur, end, v)) return false;
-        out.arr.push_back(std::move(v));
+        out.arr.push_back(move(v));
       }
       return true;
     }
@@ -299,11 +300,11 @@ static int32_t test_random(int fd) {
     int op = op_pick(rng);
     const string &k = keys[key_pick(rng)];
 
-    if (op < 50) {  // set
+    if (op < 50) {
       string v = rand_string(rng, (size_t)vlen_pick(rng));
       model[k] = v;
       if (send_and_expect_nil(fd, {"set", k, v})) return -1;
-    } else if (op < 80) {  // get
+    } else if (op < 80) {
       auto it = model.find(k);
       if (it == model.end()) {
         if (send_and_expect_nil(fd, {"get", k})) return -1;
@@ -311,7 +312,7 @@ static int32_t test_random(int fd) {
         const string &v = it->second;
         if (send_and_expect_str(fd, {"get", k}, v)) return -1;
       }
-    } else {  // del
+    } else {
       int64_t expected = model.erase(k) ? 1 : 0;
       if (send_and_expect_int(fd, {"del", k}, expected)) return -1;
     }
@@ -321,10 +322,42 @@ static int32_t test_random(int fd) {
 
 static int32_t test_large_value(int fd) {
   msg("[test] large-value");
-  string big(1 << 20, 'x');  // 1 MiB
+  string big(1 << 20, 'x');
   if (send_and_expect_nil(fd, {"set", "big", big})) return -1;
   if (send_and_expect_str(fd, {"get", "big"}, big)) return -1;
   if (send_and_expect_int(fd, {"del", "big"}, 1)) return -1;
+  return 0;
+}
+
+static int32_t test_bigzset_async_del(int fd) {
+  msg("[test] bigzset-async-del");
+  const int n = 50000;
+
+  for (int i = 0; i < n; ++i) {
+    string score = to_string(i);
+    string name = "m" + to_string(i);
+    if (send_and_expect_int(fd, {"zadd", "bz", score, name}, 1)) return -1;
+  }
+
+  if (send_and_expect_nil(fd, {"set", "probe", "1"})) return -1;
+
+  using clock = chrono::steady_clock;
+  auto t0 = clock::now();
+  if (send_and_expect_int(fd, {"del", "bz"}, 1)) return -1;
+  auto t1 = clock::now();
+  int64_t del_ms =
+      chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
+  msg("  DEL on " + to_string(n) + "-member zset returned in " +
+      to_string(del_ms) + "ms");
+
+  auto t2 = clock::now();
+  if (send_and_expect_str(fd, {"get", "probe"}, "1")) return -1;
+  auto t3 = clock::now();
+  int64_t followup_ms =
+      chrono::duration_cast<chrono::milliseconds>(t3 - t2).count();
+  msg("  GET right after DEL returned in " + to_string(followup_ms) + "ms");
+
+  if (send_and_expect_int(fd, {"del", "probe"}, 1)) return -1;
   return 0;
 }
 
@@ -335,11 +368,11 @@ struct TestTiming {
 
 template <class Fn>
 static int32_t run_test(int fd, const string &name, Fn &&fn, vector<TestTiming> &timings) {
-  using clock = std::chrono::steady_clock;
+  using clock = chrono::steady_clock;
   auto t0 = clock::now();
   int32_t rc = fn(fd);
   auto t1 = clock::now();
-  int64_t ms = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();
+  int64_t ms = chrono::duration_cast<chrono::milliseconds>(t1 - t0).count();
   timings.push_back(TestTiming{name, ms});
   if (rc == 0) {
     msg("[time] " + name + " " + to_string(ms) + "ms");
@@ -347,42 +380,11 @@ static int32_t run_test(int fd, const string &name, Fn &&fn, vector<TestTiming> 
   return rc;
 }
 
-// static int32_t query(int fd, const char *text) {
-//   uint32_t len = (uint32_t)strlen(text);
 
-//   if (len > k_max_msg) {
-//     return -1;
-//   }
 
-//   char wbuf[4 + k_max_msg];
-//   memcpy(wbuf, &len, 4);
-//   memcpy(&wbuf[4], text, len);
-//   if (int32_t err = write_all(fd, wbuf, 4 + len)) {
-//     return err;
-//   }
 
-//   char rbuf[4 + k_max_msg];
-//   errno = 0;
-//   int32_t err = read_full(fd, rbuf, 4);
-//   if (err) {
-//     msg(errno == 0 ? "EOF" : "read() error");
-//     return err;
-//   }
-//   memcpy(&len, rbuf, 4);
-//   if (len > k_max_msg) {
-//     msg("too long");
-//     return -1;
-//   }
 
-//   err = read_full(fd, &rbuf[4], len);
-//   if (err) {
-//     msg("read() error");
-//     return err;
-//   }
 
-//   msg("server says: " + string(&rbuf[4], len));
-//   return 0;
-// }
 
 int main() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -390,11 +392,13 @@ int main() {
     die("socket()");
   }
 
-  // Avoid hanging forever if the server fails to respond.
   struct timeval tv = {};
   tv.tv_sec = 2;
   (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+
+  int on = 1;
+  (void)setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &on, sizeof(on));
 
   struct sockaddr_in addr = {};
   addr.sin_family = AF_INET;
@@ -411,6 +415,7 @@ int main() {
   if (run_test(fd, "many_keys", test_many_keys, timings)) goto L_DONE;
   if (run_test(fd, "random", test_random, timings)) goto L_DONE;
   if (run_test(fd, "large_value", test_large_value, timings)) goto L_DONE;
+  if (run_test(fd, "bigzset_async_del", test_bigzset_async_del, timings)) goto L_DONE;
 
   {
     int64_t total = 0;
@@ -418,25 +423,9 @@ int main() {
     msg("TOTAL " + to_string(total) + "ms");
   }
   msg("ALL TESTS PASSED");
-  // int32_t err = query(fd, "hello1");
-  // if (err) {
-  //   goto L_DONE;
-  // }
 
-  // err = query(fd, "hello2");
-  // if (err) {
-  //   goto L_DONE;
-  // }
 
-  // string msg = "hello";
-  // write(fd, msg.c_str(), msg.length());
 
-  // char rbuf[64] = {};
-  // ssize_t n = read(fd, rbuf, sizeof(rbuf) - 1);
-  // if (n < 0) {
-  //   die("read");
-  // }
-  // cout << "server says: " << rbuf << "\n";
 L_DONE:
   close(fd);
   return 0;
