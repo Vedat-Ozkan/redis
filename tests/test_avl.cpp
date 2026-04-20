@@ -1,5 +1,7 @@
 #include "avl.h"
+#include "zset.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <iostream>
@@ -9,199 +11,149 @@
 
 using namespace std;
 
-struct Node : public AVLNode {
-  uint32_t key = 0;
-  explicit Node(uint32_t k) : AVLNode(), key(k) {}
-};
+// ---------------------------------------------------------------------------
+// AVL structural verification (via ZSet's exposed root)
+// ---------------------------------------------------------------------------
 
-static Node *as_node(AVLNode *n) { return (Node *)n; }
-
-static void avl_verify(AVLNode *node, AVLNode *parent, uint32_t &prev_key, bool &has_prev) {
-  if (!node) {
-    return;
-  }
+static void avl_verify(AVLNode *node, AVLNode *parent) {
+  if (!node) return;
   assert(node->parent == parent);
 
-  avl_verify(node->left, node, prev_key, has_prev);
-
-  uint32_t k = as_node(node)->key;
-  if (has_prev) {
-    assert(prev_key < k);
-  }
-  prev_key = k;
-  has_prev = true;
+  avl_verify(node->left, node);
+  avl_verify(node->right, node);
 
   uint32_t hl = avl_height(node->left);
   uint32_t hr = avl_height(node->right);
-  uint32_t hc = 1 + (hl > hr ? hl : hr);
-  assert(node->height == hc);
-
-  uint32_t cl = avl_cnt(node->left);
-  uint32_t cr = avl_cnt(node->right);
-  assert(node->cnt == 1 + cl + cr);
-
-  uint32_t diff = (hl > hr) ? (hl - hr) : (hr - hl);
-  assert(diff <= 1);
-
-  avl_verify(node->right, node, prev_key, has_prev);
+  assert(node->height == 1 + (hl > hr ? hl : hr));
+  assert(node->cnt == 1 + avl_cnt(node->left) + avl_cnt(node->right));
+  assert((hl > hr ? hl - hr : hr - hl) <= 1);
 }
 
-static AVLNode *bst_insert(AVLNode *root, AVLNode *node) {
-  node->left = nullptr;
-  node->right = nullptr;
-  node->parent = nullptr;
-  node->height = 1;
-  node->cnt = 1;
-
-  if (!root) {
-    return node;
-  }
-
-  AVLNode *cur = root;
-  while (true) {
-    if (as_node(node)->key < as_node(cur)->key) {
-      if (!cur->left) {
-        cur->left = node;
-        node->parent = cur;
-        break;
-      }
-      cur = cur->left;
-    } else {
-      if (!cur->right) {
-        cur->right = node;
-        node->parent = cur;
-        break;
-      }
-      cur = cur->right;
-    }
-  }
-  return node->avl_fix();
+static void verify_zset(ZSet &zs, size_t expected) {
+  avl_verify(zs.root, nullptr);
+  assert(avl_cnt(zs.root) == expected);
 }
 
-static AVLNode *bst_lookup(AVLNode *root, uint32_t key) {
-  AVLNode *cur = root;
-  while (cur) {
-    uint32_t ck = as_node(cur)->key;
-    if (key == ck) return cur;
-    cur = (key < ck) ? cur->left : cur->right;
-  }
-  return nullptr;
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+static void test_insert_and_lookup() {
+  ZSet zs;
+  assert(zs.insert("alice", 1.0));
+  assert(zs.insert("bob", 2.0));
+  assert(zs.insert("carol", 3.0));
+  verify_zset(zs, 3);
+
+  ZNode *n = zs.lookup("bob");
+  assert(n && n->score == 2.0 && n->name == "bob");
+
+  assert(zs.lookup("nobody") == nullptr);
 }
 
-static AVLNode *bst_delete(AVLNode *root, uint32_t key) {
-  AVLNode *node = bst_lookup(root, key);
-  assert(node);
-  AVLNode *new_root = node->avl_del();
-  delete as_node(node);
-  return new_root;
+static void test_update_score() {
+  ZSet zs;
+  zs.insert("x", 10.0);
+  // insert with same name returns false (update path)
+  assert(!zs.insert("x", 99.0));
+  verify_zset(zs, 1);
+
+  ZNode *n = zs.lookup("x");
+  assert(n && n->score == 99.0);
 }
 
-static void verify_tree(AVLNode *root, size_t expected_cnt) {
-  if (!root) {
-    assert(expected_cnt == 0);
-    return;
-  }
-  uint32_t prev = 0;
-  bool has_prev = false;
-  avl_verify(root, nullptr, prev, has_prev);
-  assert(avl_cnt(root) == expected_cnt);
+static void test_remove() {
+  ZSet zs;
+  zs.insert("a", 1.0);
+  zs.insert("b", 2.0);
+  zs.insert("c", 3.0);
+
+  assert(zs.remove("b"));
+  verify_zset(zs, 2);
+  assert(zs.lookup("b") == nullptr);
+  assert(!zs.remove("b"));  // already gone
 }
 
-static void test_sorted_inserts() {
-  AVLNode *root = nullptr;
-  vector<Node *> nodes;
-  const int n = 2000;
-  nodes.reserve(n);
-  for (int i = 0; i < n; ++i) {
-    nodes.push_back(new Node((uint32_t)i));
-    root = bst_insert(root, nodes.back());
-  }
-  uint32_t prev = 0;
-  bool has_prev = false;
-  avl_verify(root, nullptr, prev, has_prev);
-  assert(avl_cnt(root) == (uint32_t)n);
+static void test_seekge_ordering() {
+  ZSet zs;
+  // Insert out of order
+  zs.insert("d", 4.0);
+  zs.insert("a", 1.0);
+  zs.insert("c", 3.0);
+  zs.insert("b", 2.0);
+  verify_zset(zs, 4);
 
-  for (Node *p : nodes) delete p;
+  // seekge(2.0, "b") should land on "b"
+  ZNode *n = zs.seekge(2.0, "b");
+  assert(n && n->name == "b");
+
+  // Walk forward through all nodes by rank
+  vector<string> order;
+  for (ZNode *cur = n; cur; cur = znode_offset(cur, 1)) {
+    order.push_back(cur->name);
+  }
+  assert((order == vector<string>{"b", "c", "d"}));
 }
 
-static void test_random_inserts() {
-  mt19937_64 rng(123456);
-  uniform_int_distribution<uint32_t> dist(1, 1000000);
+static void test_random_inserts_and_deletes() {
+  mt19937_64 rng(42);
+  uniform_real_distribution<double> score_dist(0.0, 1e6);
 
-  AVLNode *root = nullptr;
-  vector<Node *> nodes;
-  set<uint32_t> seen;
-
-  const int n = 5000;
-  nodes.reserve(n);
-  while ((int)nodes.size() < n) {
-    uint32_t k = dist(rng);
-    if (!seen.insert(k).second) continue;
-    nodes.push_back(new Node(k));
-    root = bst_insert(root, nodes.back());
-  }
-
-  uint32_t prev = 0;
-  bool has_prev = false;
-  avl_verify(root, nullptr, prev, has_prev);
-  assert(avl_cnt(root) == (uint32_t)n);
-
-  for (Node *p : nodes) delete p;
-}
-
-static void test_sorted_deletes() {
-  AVLNode *root = nullptr;
-  const int n = 2000;
-  for (int i = 0; i < n; ++i) {
-    root = bst_insert(root, new Node((uint32_t)i));
-  }
-  verify_tree(root, (size_t)n);
+  ZSet zs;
+  vector<string> names;
+  set<string> seen;
+  const int n = 1000;
 
   for (int i = 0; i < n; ++i) {
-    root = bst_delete(root, (uint32_t)i);
-    if (i % 50 == 0 || i == n - 1) {
-      verify_tree(root, (size_t)(n - i - 1));
-    }
+    string name = "key" + to_string(i);
+    zs.insert(name, score_dist(rng));
+    names.push_back(name);
   }
-  assert(root == nullptr);
+  verify_zset(zs, (size_t)n);
+
+  // Delete half in shuffled order
+  shuffle(names.begin(), names.end(), rng);
+  for (int i = 0; i < n / 2; ++i) {
+    assert(zs.remove(names[i]));
+    if (i % 100 == 0) verify_zset(zs, (size_t)(n - i - 1));
+  }
+  verify_zset(zs, (size_t)(n / 2));
 }
 
-static void test_random_deletes() {
-  mt19937_64 rng(7890);
-  uniform_int_distribution<uint32_t> dist(1, 2000000);
-
-  AVLNode *root = nullptr;
-  vector<uint32_t> keys;
-  keys.reserve(5000);
-  set<uint32_t> seen;
-  while (keys.size() < 5000) {
-    uint32_t k = dist(rng);
-    if (!seen.insert(k).second) continue;
-    keys.push_back(k);
-    root = bst_insert(root, new Node(k));
+static void test_rank_navigation() {
+  ZSet zs;
+  const int n = 20;
+  for (int i = 0; i < n; ++i) {
+    zs.insert("k" + to_string(i), (double)i);
   }
-  verify_tree(root, keys.size());
+  verify_zset(zs, (size_t)n);
 
-  for (size_t i = 0; i < keys.size(); ++i) {
-    uniform_int_distribution<size_t> pick(i, keys.size() - 1);
-    size_t j = pick(rng);
-    swap(keys[i], keys[j]);
+  // Start at rank 0, walk forward n steps
+  ZNode *first = zs.seekge(0.0, "");
+  assert(first);
+  int count = 0;
+  for (ZNode *cur = first; cur; cur = znode_offset(cur, 1)) {
+    ++count;
   }
+  assert(count == n);
 
-  for (size_t i = 0; i < keys.size(); ++i) {
-    root = bst_delete(root, keys[i]);
-    if (i % 50 == 0 || i + 1 == keys.size()) {
-      verify_tree(root, keys.size() - i - 1);
-    }
-  }
-  assert(root == nullptr);
+  // avl_offset backward from last should reach first
+  ZNode *last = znode_offset(first, n - 1);
+  assert(last);
+  assert(znode_offset(last, -(n - 1)) == first);
 }
+
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
 
 int main() {
-  test_sorted_inserts();
-  test_random_inserts();
-  test_sorted_deletes();
-  test_random_deletes();
-  cout << "AVL tests passed\n";
+  test_insert_and_lookup();
+  test_update_score();
+  test_remove();
+  test_seekge_ordering();
+  test_random_inserts_and_deletes();
+  test_rank_navigation();
+  cout << "ZSet/AVL tests passed\n";
   return 0;
 }

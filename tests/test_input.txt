@@ -1,0 +1,15 @@
+# basic key-value
+set foo bar
+get foo
+del foo
+get foo
+
+# zset workflow
+zadd scores 1.5 alice
+zadd scores 3.0 bob
+zadd scores 2.0 carol
+zscore scores alice
+zscore scores bob
+zquery scores 0 "" 0 10
+zrem scores carol
+zquery scores 0 "" 0 10

@@ -380,12 +380,6 @@ static int32_t run_test(int fd, const string &name, Fn &&fn, vector<TestTiming> 
   return rc;
 }
 
-
-
-
-
-
-
 int main() {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) {
@@ -423,8 +417,6 @@ int main() {
     msg("TOTAL " + to_string(total) + "ms");
   }
   msg("ALL TESTS PASSED");
-
-
 
 L_DONE:
   close(fd);

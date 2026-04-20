@@ -1,0 +1,37 @@
+# basic key-value
+> set foo bar
+(nil)
+> get foo
+bar
+> del foo
+(integer) 1
+> get foo
+(nil)
+
+# zset workflow
+> zadd scores 1.5 alice
+(integer) 1
+> zadd scores 3.0 bob
+(integer) 1
+> zadd scores 2.0 carol
+(integer) 1
+> zscore scores alice
+(double) 1.500000
+> zscore scores bob
+(double) 3.000000
+> zquery scores 0 "" 0 10
+alice
+(double) 1.500000
+carol
+(double) 2.000000
+bob
+(double) 3.000000
+
+> zrem scores carol
+(integer) 1
+> zquery scores 0 "" 0 10
+alice
+(double) 1.500000
+bob
+(double) 3.000000
+

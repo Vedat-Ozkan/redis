@@ -32,4 +32,28 @@ add_executable(server
 add_executable(test_avl
     tests/test_avl.cpp
     src/ds/avl.cpp
+    src/ds/zset.cpp
+    src/ds/hashtable.cpp
+    ${COMMON_SRC}
+)
+
+add_executable(test_integration
+    tests/test_integration.cpp
+    ${COMMON_SRC}
+)
+target_compile_definitions(test_integration PRIVATE
+    SERVER_BIN="$<TARGET_FILE:server>"
+)
+add_dependencies(test_integration server)
+
+add_executable(test_general
+    tests/test_general.cpp
+    src/server/kvstore.cpp
+    src/ds/avl.cpp
+    src/ds/zset.cpp
+    src/ds/buffer.cpp
+    src/ds/hashtable.cpp
+    src/ds/thread_pool.cpp
+    src/ds/ttl_heap.cpp
+    ${COMMON_SRC}
 )

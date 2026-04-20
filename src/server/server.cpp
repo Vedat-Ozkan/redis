@@ -184,7 +184,7 @@ class Server {
 
     while (true) {
       poll_args.clear();
-      struct pollfd pfd = {listen_fd_, POLLIN, 0};
+      struct pollfd pfd {listen_fd_, POLLIN, 0};
       poll_args.push_back(pfd);
 
       for (const auto& conn : fd2conn_) {
