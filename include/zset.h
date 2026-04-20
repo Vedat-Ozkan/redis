@@ -8,8 +8,8 @@
 #include <string_view>
 
 struct ZNode {
-  AVLNode tree;
-  HNode hmap;
+  AVLNode avlnode;
+  HNode hnode;
   double score = 0;
   std::string name;
 

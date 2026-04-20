@@ -10,11 +10,11 @@ using namespace std;
 
 ZNode::ZNode(string name_, double score_)
     : score(score_), name(move(name_)) {
-  hmap.hcode = str_hash((const uint8_t *)name.data(), name.size());
+  hnode.hcode = str_hash((const uint8_t *)name.data(), name.size());
 }
 
 static bool zless(const AVLNode *lhs, double score, string_view name) {
-  const ZNode *zl = container_of(lhs, ZNode, tree);
+  const ZNode *zl = container_of(lhs, ZNode, avlnode);
   if (zl->score != score) {
     return zl->score < score;
   }
@@ -26,7 +26,7 @@ static bool zless(const AVLNode *lhs, double score, string_view name) {
 }
 
 static bool zless(const AVLNode *lhs, const AVLNode *rhs) {
-  const ZNode *zr = container_of(rhs, ZNode, tree);
+  const ZNode *zr = container_of(rhs, ZNode, avlnode);
   return zless(lhs, zr->score, zr->name);
 }
 
@@ -36,11 +36,11 @@ static void tree_insert(ZSet *zs, ZNode *node) {
   AVLNode **from = &zs->root;
   while (*from) {
     parent = *from;
-    from = zless(&node->tree, parent) ? &parent->left : &parent->right;
+    from = zless(&node->avlnode, parent) ? &parent->left : &parent->right;
   }
-  *from = &node->tree;
-  node->tree.parent = parent;
-  zs->root = node->tree.avl_fix();
+  *from = &node->avlnode;
+  node->avlnode.parent = parent;
+  zs->root = node->avlnode.avl_fix();
 }
 
 static void tree_dispose(AVLNode *node) {
@@ -49,15 +49,15 @@ static void tree_dispose(AVLNode *node) {
   }
   tree_dispose(node->left);
   tree_dispose(node->right);
-  delete container_of(node, ZNode, tree);
+  delete container_of(node, ZNode, avlnode);
 }
 
 static void update_score(ZSet *zs, ZNode *node, double score) {
   if (node->score == score) {
     return;
   }
-  zs->root = node->tree.avl_del();
-  node->tree = AVLNode{};
+  zs->root = node->avlnode.avl_del();
+  node->avlnode = AVLNode{};
   node->score = score;
   tree_insert(zs, node);
 }
@@ -69,7 +69,7 @@ struct HKey {
 };
 
 static bool hcmp(HNode *node, HNode *key) {
-  ZNode *zn = container_of(node, ZNode, hmap);
+  ZNode *zn = container_of(node, ZNode, hnode);
   HKey *k = container_of(key, HKey, node);
   if (zn->name.size() != k->name.size()) {
     return false;
@@ -86,7 +86,7 @@ ZNode *ZSet::lookup(string_view name) {
   k.node.hcode = str_hash((const uint8_t *)name.data(), name.size());
   k.name = name;
   HNode *found = hmap.hm_lookup(&k.node, &hcmp);
-  return found ? container_of(found, ZNode, hmap) : nullptr;
+  return found ? container_of(found, ZNode, hnode) : nullptr;
 }
 
 bool ZSet::insert(string name, double score) {
@@ -95,7 +95,7 @@ bool ZSet::insert(string name, double score) {
     return false;
   }
   ZNode *node = new ZNode(move(name), score);
-  hmap.hm_insert(&node->hmap);
+  hmap.hm_insert(&node->hnode);
   tree_insert(this, node);
   return true;
 }
@@ -108,8 +108,8 @@ bool ZSet::remove(string_view name) {
   if (!found) {
     return false;
   }
-  ZNode *node = container_of(found, ZNode, hmap);
-  root = node->tree.avl_del();
+  ZNode *node = container_of(found, ZNode, hnode);
+  root = node->avlnode.avl_del();
   delete node;
   return true;
 }
@@ -125,7 +125,7 @@ ZNode *ZSet::seekge(double score, string_view name) {
       cur = cur->left;
     }
   }
-  return found ? container_of(found, ZNode, tree) : nullptr;
+  return found ? container_of(found, ZNode, avlnode) : nullptr;
 }
 
 ZSet::~ZSet() {
@@ -137,6 +137,6 @@ ZNode *znode_offset(ZNode *node, int64_t offset) {
   if (!node) {
     return nullptr;
   }
-  AVLNode *tnode = node->tree.avl_offset(offset);
-  return tnode ? container_of(tnode, ZNode, tree) : nullptr;
+  AVLNode *tnode = node->avlnode.avl_offset(offset);
+  return tnode ? container_of(tnode, ZNode, avlnode) : nullptr;
 }
